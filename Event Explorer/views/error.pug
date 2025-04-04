@@ -1,0 +1,8 @@
+extends layout
+
+block content
+  .container.my-5
+    h1.text-danger= message
+    if error
+      pre= error.stack
+    a.btn.btn-primary(href="/") Back to Home

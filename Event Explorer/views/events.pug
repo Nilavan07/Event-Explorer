@@ -1,0 +1,91 @@
+extends layout
+
+block content
+  .container.mt-4
+    if error
+      .alert.alert-danger.alert-dismissible.fade.show
+        strong Error: 
+        | #{error}
+        button.btn-close(type="button", data-bs-dismiss="alert", aria-label="Close")
+    
+    .d-flex.justify-content-between.align-items-center.mb-4
+      h1= title
+      form(action="/events", method="get").d-flex
+        input.form-control.me-2(type="text", name="location", placeholder="Search location", value=location || '', required)
+        select.form-select.me-2(name="category")
+          option(value="", selected=!category) All Categories
+          option(value="103", selected=category === '103') Music
+          option(value="110", selected=category === '110') Food & Drink
+          option(value="105", selected=category === '105') Performing Arts
+        button.btn.btn-primary(type="submit") Search
+
+    if weather
+      .card.mb-4
+        .card-body
+          .d-flex.align-items-center
+            img(src=weather.icon, alt=weather.conditions, style="width: 80px; height: 80px;")
+            .ms-4
+              h4 Weather Forecast
+              p.mb-1 
+                strong Temperature: 
+                | #{weather.temp}°C (Feels like #{weather.feels_like}°C)
+              p.mb-1 
+                strong Conditions: 
+                | #{weather.conditions} (#{weather.description})
+              p.mb-0 
+                strong Wind/Rain: 
+                | #{weather.wind} m/s wind, #{weather.rain} mm rain
+
+    if events && events.length > 0
+      .row.row-cols-1.row-cols-md-2.row-cols-lg-3.g-4
+        each event in events
+          .col
+            .card.h-100
+              if event.logo
+                img.card-img-top(src=event.logo, alt=event.name, style="height: 200px; object-fit: cover;")
+              else
+                .card-img-top.bg-light.d-flex.align-items-center.justify-content-center(style="height: 200px;")
+                  i.fas.fa-calendar-alt.fa-4x.text-muted
+              .card-body
+                h5.card-title= event.name
+                p.card-text
+                  i.fas.fa-calendar-day.me-2
+                  | #{event.start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                p.card-text
+                  i.fas.fa-map-marker-alt.me-2
+                  | #{event.venue.name}
+                if event.is_free
+                  span.badge.bg-success.mb-2 Free Event
+                if event.description
+                  p.card-text.text-truncate= event.description.replace(/<[^>]*>/g, '').substring(0, 100) + '...'
+              .card-footer.bg-white
+                a.btn.btn-primary(href=`/event/${event.id}`) View Details
+    else
+      .alert.alert-info No events found. Try a different location or category.
+
+  //- Scripts section moved outside of block content
+  if events && events.length > 0 && mapsKey
+    script.
+      function initMap() {
+        const map = new google.maps.Map(document.getElementById('map'), {
+          center: { 
+            lat: #{events[0].venue.lat}, 
+            lng: #{events[0].venue.lng} 
+          },
+          zoom: 12
+        });
+        
+        #{JSON.stringify(events)}.forEach(event => {
+          if (event.venue.lat && event.venue.lng) {
+            new google.maps.Marker({
+              position: { 
+                lat: event.venue.lat, 
+                lng: event.venue.lng 
+              },
+              map: map,
+              title: event.name
+            });
+          }
+        });
+      }
+      window.initMap = initMap;

@@ -1,0 +1,37 @@
+extends layout
+
+block content
+  section.hero.py-5.bg-primary.text-white.mb-4
+    .container.text-center
+      h1.display-4.mb-4 Discover Amazing Events
+      p.lead.mb-5 Find concerts, sports, and local happenings
+      form.row.g-3.justify-content-center(action="/events" method="GET")
+        .col-md-6
+          input.form-control.form-control-lg(
+            type="text" 
+            name="location" 
+            placeholder="Enter city or zip code" 
+            required
+          )
+        .col-md-2
+          button.btn.btn-light.btn-lg.w-100(type="submit")
+            i.fas.fa-search.me-2
+            | Search
+
+  .container.my-5
+    .row
+      .col-md-4.mb-4
+        .card.h-100.text-center.p-4
+          i.fas.fa-music.fa-3x.mb-3.text-primary
+          h3 Concerts
+          p Live music events
+      .col-md-4.mb-4
+        .card.h-100.text-center.p-4
+          i.fas.fa-running.fa-3x.mb-3.text-primary
+          h3 Sports
+          p Games and tournaments
+      .col-md-4.mb-4
+        .card.h-100.text-center.p-4
+          i.fas.fa-umbrella-beach.fa-3x.mb-3.text-primary
+          h3 Festivals
+          p Cultural events

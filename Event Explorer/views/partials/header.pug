@@ -1,0 +1,19 @@
+header
+  nav.navbar.navbar-expand-lg.navbar-dark.bg-primary
+    .container
+      a.navbar-brand(href="/")
+        img(src="/images/logo.png" height="30" alt="Local Event Explorer")
+      button.navbar-toggler(type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav")
+        span.navbar-toggler-icon
+      .collapse.navbar-collapse#navbarNav
+        ul.navbar-nav.me-auto
+          li.nav-item
+            a.nav-link(href="/") Home
+        form.d-flex(action="/events" method="GET")
+          input.form-control.me-2(
+            type="search"
+            name="location"
+            placeholder="Search location"
+            required
+          )
+          button.btn.btn-light(type="submit") Search

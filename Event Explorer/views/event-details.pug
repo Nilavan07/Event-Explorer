@@ -1,0 +1,395 @@
+extends layout
+
+block content
+  .container.mt-4
+    .row
+      .col-lg-8
+        .card.mb-4
+          if event.image
+            img.card-img-top(src=event.image, alt=event.name, style="max-height: 400px; object-fit: cover;")
+          else
+            .card-img-top.bg-light.d-flex.align-items-center.justify-content-center(style="height: 300px;")
+              i.fas.fa-calendar-alt.fa-5x.text-muted
+          .card-body
+            h1.card-title= event.name
+            p.card-text
+              i.fas.fa-calendar-day.me-2
+              | #{event.start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            p.card-text
+              i.fas.fa-map-marker-alt.me-2
+              | #{venue.name}
+              if venue.address
+                br
+                small.text-muted= venue.address
+            
+            .d-flex.flex-wrap.gap-2.mt-3
+              if user
+                button.btn.btn-outline-primary#saveEventBtn(data-event-id=event.id)
+                  i.far.fa-bookmark.me-2
+                  | Save Event
+              a.btn.btn-primary(href=event.url, target="_blank")
+                i.fas.fa-ticket-alt.me-2
+                | Get Tickets
+              button.btn.btn-info#showDirectionsBtn
+                i.fas.fa-map-marked-alt.me-2
+                | View Directions
+            
+            #directionsPanel.mt-3(style="display: none;")
+              .card
+                .card-header.d-flex.justify-content-between.align-items-center.bg-light
+                  h5.mb-0 Directions
+                  button.btn.btn-sm.btn-close#closeDirections
+                .card-body.p-0
+                  #map(style="height: 300px;")
+                  #directionsList(style="max-height: 300px; overflow-y: auto;")
+                  #directionsError.alert.alert-danger.m-3(style="display: none;")
+            
+            .mt-4
+              h3 About This Event
+              if event.description
+                .event-description !{event.description.replace(/\n/g, '<br>')}
+              else
+                p No description available.
+
+      .col-lg-4
+        if weather
+          .card.mb-4
+            .card-body
+              h4.card-title Weather Forecast
+              .d-flex.align-items-center
+                img(src=weather.icon, alt=weather.conditions, style="width: 80px; height: 80px;")
+                .ms-3
+                  p.mb-1 
+                    strong #{weather.temp}°C 
+                    | (Feels like #{weather.feels_like}°C)
+                  p.mb-1 #{weather.conditions}
+                  p.mb-0 
+                    small.text-muted #{weather.description}
+              .mt-3
+                p.mb-1
+                  i.fas.fa-wind.me-2
+                  | Wind: #{weather.wind} m/s
+                p.mb-0
+                  i.fas.fa-tint.me-2
+                  | Humidity: #{weather.humidity}%
+
+        if venue.lat && venue.lng
+          .card.mb-4
+            .card-body
+              h4.card-title Venue Location
+              #staticMap(style="height: 300px; border-radius: 8px; margin-bottom: 15px;")
+              .d-flex.flex-wrap.gap-2
+                button.btn.btn-outline-primary#showDirectionsBtn2
+                  i.fas.fa-directions.me-2
+                  | Get Directions
+              if venue.address
+                .mt-3
+                  p.mb-0
+                    i.fas.fa-map-marker-alt.me-2
+                    | #{venue.address}
+        else
+          .card.mb-4
+            .card-body
+              .alert.alert-warning Location data not available for this venue
+
+        if restaurants.length > 0
+          .card
+            .card-body
+              h4.card-title Nearby Dining
+              each place in restaurants.slice(0, 5)
+                - const placeLat = place.geometry?.location?.lat
+                - const placeLng = place.geometry?.location?.lng
+                .card.mb-3
+                  .row.g-0
+                    if place.photo
+                      .col-md-4
+                        img.img-fluid.rounded-start.h-100.object-fit-cover(
+                          src=`https://maps.googleapis.com/maps/api/place/photo?maxwidth=200&photoreference=${place.photo}&key=${mapsKey}`,
+                          alt=place.name,
+                          loading="lazy",
+                          style="min-height: 150px;"
+                        )
+                    div(class=place.photo ? 'col-md-8' : 'col-12')
+                      .card-body
+                        h5.card-title= place.name
+                        .d-flex.align-items-center.mb-2
+                          if place.rating
+                            span.text-warning.me-2
+                              - const fullStars = Math.round(place.rating)
+                              - const emptyStars = 5 - fullStars
+                              | #{'★'.repeat(fullStars)}#{'☆'.repeat(emptyStars)}
+                            small.text-muted= place.rating.toFixed(1)
+                        p.card-text.text-muted.small.mb-1
+                          i.fas.fa-map-marker-alt.me-1
+                          | #{place.vicinity || place.address}
+                        .d-flex.align-items-center.mb-3
+                          if place.price_level
+                            span.me-2= '$'.repeat(place.price_level)
+                          if place.open_now !== undefined
+                            span.badge(class=place.open_now ? 'bg-success' : 'bg-secondary')
+                              | #{place.open_now ? 'Open Now' : 'Closed'}
+                        if placeLat && placeLng
+                          button.btn.btn-sm.btn-outline-primary.get-directions-btn(
+                            data-lat=placeLat,
+                            data-lng=placeLng
+                          )
+                            i.fas.fa-directions.me-1
+                            | Get Directions
+
+block scripts
+  script(src=`https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places,directions&callback=initMap`, async, defer)
+  script.
+    let map;
+    let directionsService;
+    let directionsRenderer;
+    let staticMap;
+    let activeButton = null;
+
+    function initMap() {
+      initStaticMap();
+      initDirectionsMap();
+    }
+
+    function initStaticMap() {
+      const venueLat = #{venue.lat || 0};
+      const venueLng = #{venue.lng || 0};
+      
+      if (venueLat && venueLng) {
+        staticMap = new google.maps.Map(document.getElementById('staticMap'), {
+          center: { lat: venueLat, lng: venueLng },
+          zoom: 15,
+          disableDefaultUI: true,
+          gestureHandling: 'none'
+        });
+
+        new google.maps.Marker({
+          position: { lat: venueLat, lng: venueLng },
+          map: staticMap,
+          title: '#{venue.name}',
+          icon: {
+            url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
+            scaledSize: new google.maps.Size(32, 32)
+          }
+        });
+      }
+    }
+
+    function initDirectionsMap() {
+      const venueLat = #{venue.lat || 0};
+      const venueLng = #{venue.lng || 0};
+      
+      if (venueLat && venueLng) {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: { lat: venueLat, lng: venueLng },
+          zoom: 12,
+          gestureHandling: 'greedy'
+        });
+
+        directionsService = new google.maps.DirectionsService();
+        directionsRenderer = new google.maps.DirectionsRenderer({
+          map: map,
+          panel: document.getElementById('directionsList'),
+          suppressMarkers: false,
+          suppressInfoWindows: true
+        });
+      }
+    }
+
+    function showDirectionsPanel() {
+      const panel = document.getElementById('directionsPanel');
+      panel.style.display = 'block';
+      document.getElementById('directionsError').style.display = 'none';
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideDirectionsPanel() {
+      document.getElementById('directionsPanel').style.display = 'none';
+      resetActiveButton();
+    }
+
+    function resetActiveButton() {
+      if (activeButton) {
+        activeButton.innerHTML = activeButton.dataset.originalHtml;
+        activeButton.disabled = false;
+        activeButton = null;
+      }
+    }
+
+    function showDirectionsError(message) {
+      const errorElement = document.getElementById('directionsError');
+      errorElement.innerHTML = `<i class="fas fa-exclamation-triangle me-2"></i>${message}`;
+      errorElement.style.display = 'block';
+      resetActiveButton();
+    }
+
+    function calculateDirections(origin, destination, buttonElement) {
+      if (buttonElement) {
+        activeButton = buttonElement;
+        buttonElement.dataset.originalHtml = buttonElement.innerHTML;
+        buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
+        buttonElement.disabled = true;
+      }
+
+      showDirectionsPanel();
+      document.getElementById('directionsList').innerHTML = '';
+
+      directionsService.route({
+        origin: origin,
+        destination: destination,
+        travelMode: 'DRIVING',
+        drivingOptions: {
+          departureTime: new Date(Date.now() + 5*60000),
+          trafficModel: 'bestguess'
+        },
+        unitSystem: google.maps.UnitSystem.METRIC
+      }, (response, status) => {
+        if (status === 'OK') {
+          directionsRenderer.setDirections(response);
+          
+          // Adjust view to show entire route
+          const bounds = new google.maps.LatLngBounds();
+          const route = response.routes[0];
+          route.legs.forEach(leg => {
+            bounds.extend(leg.start_location);
+            bounds.extend(leg.end_location);
+          });
+          map.fitBounds(bounds);
+        } else {
+          handleDirectionsError(status, destination);
+        }
+        resetActiveButton();
+      });
+    }
+
+    function handleDirectionsError(status, destination) {
+      let errorMessage = 'Could not calculate directions.';
+      
+      switch(status) {
+        case 'ZERO_RESULTS':
+          errorMessage = 'No route could be found between these locations.';
+          break;
+        case 'NOT_FOUND':
+          errorMessage = 'One of the locations could not be found.';
+          break;
+        case 'OVER_QUERY_LIMIT':
+          errorMessage = 'Too many directions requests. Please try again later.';
+          break;
+      }
+      
+      showDirectionsError(errorMessage);
+      
+      // Fallback: Show destination marker
+      new google.maps.Marker({
+        position: destination,
+        map: map,
+        title: 'Destination'
+      });
+      map.setCenter(destination);
+      map.setZoom(14);
+    }
+
+    function getCurrentLocation(buttonElement, destinationLat, destinationLng) {
+      const destination = new google.maps.LatLng(destinationLat, destinationLng);
+      
+      if (!navigator.geolocation) {
+        calculateDirections(destination, destination, buttonElement);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const origin = new google.maps.LatLng(
+            position.coords.latitude,
+            position.coords.longitude
+          );
+          calculateDirections(origin, destination, buttonElement);
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          let errorMessage = 'Could not get your location.';
+          
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access was denied. Showing destination only.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information is unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'The request to get your location timed out.';
+              break;
+          }
+          
+          showDirectionsError(errorMessage);
+          calculateDirections(destination, destination, buttonElement);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Main directions button
+      document.getElementById('showDirectionsBtn')?.addEventListener('click', () => {
+        const venueLat = #{venue.lat || 0};
+        const venueLng = #{venue.lng || 0};
+        if (venueLat && venueLng) {
+          getCurrentLocation(null, venueLat, venueLng);
+        } else {
+          showDirectionsError('Venue location data is missing.');
+        }
+      });
+
+      // Secondary directions button
+      document.getElementById('showDirectionsBtn2')?.addEventListener('click', function() {
+        const venueLat = #{venue.lat || 0};
+        const venueLng = #{venue.lng || 0};
+        if (venueLat && venueLng) {
+          getCurrentLocation(this, venueLat, venueLng);
+        } else {
+          showDirectionsError('Venue location data is missing.');
+        }
+      });
+
+      // Restaurant directions buttons
+      document.querySelectorAll('.get-directions-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const lat = parseFloat(this.dataset.lat);
+          const lng = parseFloat(this.dataset.lng);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            getCurrentLocation(this, lat, lng);
+          } else {
+            showDirectionsError('Location data is invalid.');
+          }
+        });
+      });
+
+      // Close directions panel
+      document.getElementById('closeDirections')?.addEventListener('click', hideDirectionsPanel);
+
+      // Save event button
+      document.getElementById('saveEventBtn')?.addEventListener('click', function() {
+        const eventId = this.dataset.eventId;
+        fetch('/api/favorites', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ eventId })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            this.innerHTML = '<i class="fas fa-check me-2"></i>Saved';
+            this.classList.remove('btn-outline-primary');
+            this.classList.add('btn-success');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+        });
+      });
+    });
